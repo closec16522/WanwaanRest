@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบบริหารจัดการร้านวันวาฬ</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap');
+    body { font-family: 'Prompt', sans-serif; background-color: #f3f4f6; }
+    .glass-effect { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+    
+    /* ซ่อนองค์ประกอบอื่นๆ เวลาสั่ง Print PDF */
+    @media print {
+      body { background-color: white; }
+      nav, footer, .no-print { display: none !important; }
+      #reportSection { display: block !important; box-shadow: none; border: none; }
+      .glass-effect { background: white; border: none; box-shadow: none; }
+      main { padding: 0; }
+    }
+  </style>
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <!-- Navbar -->
+  <nav class="bg-blue-800 text-white shadow-lg no-print">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16">
+        <div class="flex items-center">
+          <i class="fa-solid fa-store text-2xl mr-3"></i>
+          <span class="font-bold text-xl">วันวาฬ (Wanwaan)</span>
+        </div>
+        <div class="flex items-center space-x-2 md:space-x-4">
+          <span class="hidden md:block text-sm mr-2">ผู้ใช้งาน: <?= userEmail ?></span>
+          <? if (userRole === 'Admin' || userRole === 'Partner') { ?>
+            <button onclick="switchTab('dashboard')" class="px-3 py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition">แดชบอร์ด</button>
+            <button onclick="switchTab('report')" class="px-3 py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition">รายงาน</button>
+            <button onclick="switchTab('partner')" class="hidden px-3 py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition">หุ้นส่วน</button>
+          <? } ?>
+          <button onclick="switchTab('form')" class="px-3 py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition bg-blue-600">บันทึกข้อมูล</button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+    
+    <!-- ================= FORM SECTION ================= -->
+    <div id="formSection" style="display: none;" class="max-w-2xl mx-auto glass-effect p-8 rounded-2xl shadow-xl border border-gray-100">
+      <h2 class="text-2xl font-bold text-gray-800 mb-6 text-center">บันทึกรายรับ-รายจ่าย</h2>
+      
+      <form id="expenseForm" onsubmit="submitForm(event)">
+        <div class="space-y-5">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">ประเภทรายการ</label>
+              <select id="type" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                <option value="Expense">รายจ่าย (Expense)</option>
+                <option value="Income">รายรับ (Income)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">หมวดหมู่</label>
+              <input type="text" id="category" required placeholder="เช่น วัตถุดิบ, ค่าไฟ, ยอดขาย" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">จำนวนเงิน (บาท) <span class="text-red-500">*</span></label>
+            <input type="number" id="amount" step="0.01" min="0.01" required placeholder="0.00" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition">
+            <p class="text-xs text-red-500 mt-1 hidden" id="amountError">ตัวเลขต้องมากกว่า 0</p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">หมายเหตุเพิ่มเติม</label>
+            <textarea id="note" rows="2" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"></textarea>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">แนบสลิป/ใบเสร็จ (ถ้ามี)</label>
+            <input type="file" id="receiptFile" accept="image/*,application/pdf" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+          </div>
+
+          <button type="submit" id="submitBtn" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 transition shadow-lg flex justify-center items-center">
+            <i class="fa-solid fa-save mr-2"></i> บันทึกข้อมูล
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <? if (userRole === 'Admin' || userRole === 'Partner') { ?>
+    <!-- ================= DASHBOARD SECTION ================= -->
+    <div id="dashboardSection" style="display: none;" class="space-y-6">
+      <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold text-gray-800">แดชบอร์ดสรุปผล (เดือนนี้)</h2>
+        <button onclick="sendLineNotify()" class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 shadow transition text-sm">
+          <i class="fa-brands fa-line mr-1"></i> แจ้งเตือนเข้า LINE
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="glass-effect p-6 rounded-2xl shadow border-l-4 border-green-500">
+          <p class="text-sm text-gray-500 font-medium">รายรับรวม (Income)</p>
+          <h3 class="text-3xl font-bold text-green-600 mt-2" id="sumIncome">กำลังโหลด...</h3>
+        </div>
+        <div class="glass-effect p-6 rounded-2xl shadow border-l-4 border-red-500">
+          <p class="text-sm text-gray-500 font-medium">รายจ่ายรวม (Expense)</p>
+          <h3 class="text-3xl font-bold text-red-600 mt-2" id="sumExpense">กำลังโหลด...</h3>
+        </div>
+        <div class="glass-effect p-6 rounded-2xl shadow border-l-4 border-blue-500">
+          <p class="text-sm text-gray-500 font-medium">กำไรสุทธิ (Net Profit)</p>
+          <h3 class="text-3xl font-bold text-blue-600 mt-2" id="netProfit">กำลังโหลด...</h3>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-1 gap-6 mt-6 max-w-4xl mx-auto w-full">
+        <div class="glass-effect p-6 rounded-2xl shadow border border-gray-100">
+          <h3 class="text-lg font-bold text-gray-800 mb-4 text-center">สัดส่วนรายจ่ายตามหมวดหมู่</h3>
+          <div class="relative h-72 w-full">
+            <canvas id="expenseChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= REPORT SECTION (หน้าใหม่) ================= -->
+    <div id="reportSection" style="display: none;" class="space-y-6 w-full">
+      <div class="glass-effect p-6 rounded-2xl shadow border border-gray-100 w-full overflow-hidden">
+        
+        <!-- Header & Filters -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b pb-4 no-print">
+          <h2 class="text-2xl font-bold text-gray-800">รายงานข้อมูล</h2>
+          
+          <div class="flex flex-wrap items-center gap-2">
+            <select id="filterType" onchange="applyFilters()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="All">ทั้งหมด (All)</option>
+              <option value="Income">รายรับ</option>
+              <option value="Expense">รายจ่าย</option>
+            </select>
+            <input type="date" id="filterStartDate" onchange="applyFilters()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+            <span class="text-gray-500">-</span>
+            <input type="date" id="filterEndDate" onchange="applyFilters()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+            
+            <button onclick="window.print()" class="bg-gray-800 text-white px-4 py-2 rounded-lg shadow hover:bg-gray-900 transition text-sm flex items-center gap-2 ml-2">
+              <i class="fa-solid fa-print"></i> พิมพ์ PDF
+            </button>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="overflow-x-auto w-full">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600 whitespace-nowrap">วันที่</th>
+                <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600 whitespace-nowrap">ประเภท</th>
+                <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600 whitespace-nowrap">หมวดหมู่</th>
+                <th class="px-6 py-4 text-right text-sm font-semibold text-gray-600 whitespace-nowrap">จำนวนเงิน</th>
+                <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600 whitespace-nowrap">หมายเหตุ</th>
+                <th class="px-6 py-4 text-center text-sm font-semibold text-gray-600 whitespace-nowrap no-print">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody id="reportTableBody" class="bg-white divide-y divide-gray-100">
+              <tr><td colspan="6" class="px-6 py-8 text-center text-gray-500"><i class="fa-solid fa-spinner fa-spin mr-2"></i> กำลังโหลดข้อมูล...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="flex justify-between items-center mt-6 no-print">
+          <button onclick="changePage(-1)" id="prevBtn" class="border border-gray-300 px-4 py-2 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition">
+            &laquo; ก่อนหน้า
+          </button>
+          <span id="pageInfo" class="text-sm text-gray-600 font-medium">หน้า 1 / 1</span>
+          <button onclick="changePage(1)" id="nextBtn" class="border border-gray-300 px-4 py-2 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition">
+            ถัดไป &raquo;
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ================= PARTNER SECTION ================= -->
+    <div id="partnerSection" style="display: none;" class="space-y-6 max-w-4xl mx-auto">
+      <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold text-gray-800">ส่วนแบ่งหุ้นส่วน (Partners Share)</h2>
+      </div>
+      <div class="glass-effect p-6 rounded-2xl shadow border border-gray-100">
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ชื่อหุ้นส่วน</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">สัดส่วน (%)</th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">จำนวนเงิน (บาท)</th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200" id="partnerTableBody">
+              <tr><td colspan="3" class="px-6 py-4 text-center text-sm text-gray-500">กำลังโหลดข้อมูล...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <? } ?>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-gray-800 text-gray-300 py-6 mt-auto no-print">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <p class="text-sm">Name System (ระบบบริหารจัดการร้านวันวาฬ)</p>
+      <p class="mt-2 font-medium text-white">&copy; Copyright 2024, Mr.Taweesak.kom (0623285963)</p>
+    </div>
+  </footer>
+
+  <script>
+    // ==========================================
+    // 1. ตัวแปรส่วนกลาง (Global Variables)
+    // ==========================================
+    let currentChart = null; 
+    
+    // สำหรับหน้า Report
+    let allTransactions = [];
+    let filteredTransactions = [];
+    let currentPage = 1;
+    const itemsPerPage = 10;
+
+    // ==========================================
+    // 2. ระบบนำทาง (Routing / Switch Tab)
+    // ==========================================
+    function switchTab(tabName) {
+      document.getElementById('formSection').style.display = 'none';
+      const dashSection = document.getElementById('dashboardSection');
+      const partnerSection = document.getElementById('partnerSection');
+      const reportSection = document.getElementById('reportSection');
+
+      if (dashSection) dashSection.style.display = 'none';
+      if (partnerSection) partnerSection.style.display = 'none';
+      if (reportSection) reportSection.style.display = 'none';
+
+      if (tabName === 'form') {
+        document.getElementById('formSection').style.display = 'block';
+      } else if (tabName === 'dashboard' && dashSection) {
+        dashSection.style.display = 'block';
+        loadDashboardData();
+      } else if (tabName === 'partner' && partnerSection) {
+        partnerSection.style.display = 'block';
+        loadDashboardData();
+      } else if (tabName === 'report' && reportSection) {
+        reportSection.style.display = 'block';
+        loadReportData(); // เรียกข้อมูลรายงาน
+      }
+    }
+
+    window.onload = function() {
+      const defaultPage = '<?= page ?>' || 'dashboard';
+      switchTab(defaultPage);
+      
+      // ตั้งค่าวันที่เริ่มต้นในฟิลเตอร์ (วันที่ 1 ถึง วันนี้)
+      const today = new Date();
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      if(document.getElementById('filterStartDate')){
+        document.getElementById('filterStartDate').value = firstDay.toISOString().split('T')[0];
+        document.getElementById('filterEndDate').value = today.toISOString().split('T')[0];
+      }
+    };
+
+    // ==========================================
+    // 3. ระบบรายงานข้อมูล (Report System)
+    // ==========================================
+    function loadReportData() {
+      document.getElementById('reportTableBody').innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-gray-500"><i class="fa-solid fa-spinner fa-spin mr-2"></i> กำลังโหลดข้อมูล...</td></tr>';
+      
+      google.script.run
+        .withSuccessHandler(function(data) {
+          allTransactions = data;
+          applyFilters(); // กรองข้อมูลและแสดงผล
+        })
+        .withFailureHandler(function(err) {
+          document.getElementById('reportTableBody').innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">เกิดข้อผิดพลาด: ${err.message}</td></tr>`;
+        })
+        .getTransactions();
+    }
+
+    function applyFilters() {
+      const typeStr = document.getElementById('filterType').value;
+      const startStr = document.getElementById('filterStartDate').value;
+      const endStr = document.getElementById('filterEndDate').value;
+
+      filteredTransactions = allTransactions.filter(item => {
+        // กรองประเภท
+        if (typeStr !== 'All' && item.type !== typeStr) return false;
+        
+        // กรองวันที่ (เปรียบเทียบแค่ระดับวัน)
+        if (startStr || endStr) {
+          const itemDate = new Date(item.date);
+          itemDate.setHours(0,0,0,0);
+          
+          if (startStr) {
+            const startDate = new Date(startStr);
+            startDate.setHours(0,0,0,0);
+            if (itemDate < startDate) return false;
+          }
+          if (endStr) {
+            const endDate = new Date(endStr);
+            endDate.setHours(0,0,0,0);
+            if (itemDate > endDate) return false;
+          }
+        }
+        return true;
+      });
+
+      currentPage = 1; // รีเซ็ตหน้ากลับไปที่ 1 เสมอเมื่อมีการค้นหาใหม่
+      renderReportTable();
+    }
+
+    function renderReportTable() {
+      const tbody = document.getElementById('reportTableBody');
+      const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage) || 1;
+      
+      // จัดการปุ่มเปลี่ยนหน้า
+      document.getElementById('pageInfo').innerText = `หน้า ${currentPage} / ${totalPages}`;
+      document.getElementById('prevBtn').disabled = (currentPage === 1);
+      document.getElementById('nextBtn').disabled = (currentPage === totalPages);
+
+      if (filteredTransactions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-gray-500">ไม่พบข้อมูลตามเงื่อนไขที่ค้นหา</td></tr>';
+        return;
+      }
+
+      const startIndex = (currentPage - 1) * itemsPerPage;
+      const paginatedData = filteredTransactions.slice(startIndex, startIndex + itemsPerPage);
+
+      let html = '';
+      paginatedData.forEach(item => {
+        // จัดรูปแบบวันที่ (YYYY-MM-DD)
+        const dateObj = new Date(item.date);
+        const dateStr = dateObj.toISOString().split('T')[0];
+        
+        // จัดรูปแบบป้ายประเภท (Badge)
+        const typeBadge = item.type === 'Income' 
+          ? `<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium">รายรับ</span>`
+          : `<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-medium">รายจ่าย</span>`;
+
+        html += `
+          <tr class="hover:bg-gray-50 transition">
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">${dateStr}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${typeBadge}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${item.category}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-right ${item.type === 'Income' ? 'text-green-600' : 'text-gray-800'}">${item.amount.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+            <td class="px-6 py-4 text-sm text-gray-500 truncate max-w-xs">${item.note || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium no-print space-x-2">
+              <button onclick="viewRecord('${item.id}')" class="text-green-500 border border-green-500 hover:bg-green-50 px-2.5 py-1.5 rounded-md transition" title="ดูข้อมูล">
+                <i class="fa-regular fa-eye"></i>
+              </button>
+              <button onclick="editRecord('${item.id}')" class="text-blue-500 border border-blue-500 hover:bg-blue-50 px-2.5 py-1.5 rounded-md transition" title="แก้ไข">
+                <i class="fa-regular fa-pen-to-square"></i>
+              </button>
+              <button onclick="deleteRecord('${item.id}')" class="text-red-500 border border-red-500 hover:bg-red-50 px-2.5 py-1.5 rounded-md transition" title="ลบ">
+                <i class="fa-regular fa-trash-can"></i>
+              </button>
+            </td>
+          </tr>
+        `;
+      });
+
+      tbody.innerHTML = html;
+    }
+
+    function changePage(step) {
+      const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
+      currentPage += step;
+      if (currentPage < 1) currentPage = 1;
+      if (currentPage > totalPages) currentPage = totalPages;
+      renderReportTable();
+    }
+
+    // --- ฟังก์ชันจัดการข้อมูล (ดู, แก้ไข, ลบ) ---
+    
+    function viewRecord(id) {
+      const item = allTransactions.find(t => t.id === id);
+      if(!item) return;
+
+      const dateStr = new Date(item.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      let htmlContent = `
+        <div class="text-left space-y-3 mt-4 text-sm">
+          <p><b>วันที่บันทึก:</b> ${dateStr}</p>
+          <p><b>ผู้บันทึก:</b> ${item.email}</p>
+          <p><b>ประเภท:</b> ${item.type === 'Income' ? 'รายรับ' : 'รายจ่าย'}</p>
+          <p><b>หมวดหมู่:</b> ${item.category}</p>
+          <p><b>จำนวนเงิน:</b> ${item.amount.toLocaleString()} บาท</p>
+          <p><b>หมายเหตุ:</b> ${item.note || '-'}</p>
+        </div>
+      `;
+      if (item.receipt) {
+        htmlContent += `<div class="mt-4"><a href="${item.receipt}" target="_blank" class="text-blue-600 underline"><i class="fa-solid fa-paperclip"></i> ดูไฟล์สลิป/ใบเสร็จแนบ</a></div>`;
+      }
+
+      Swal.fire({
+        title: 'รายละเอียดรายการ',
+        html: htmlContent,
+        icon: 'info',
+        confirmButtonColor: '#3085d6',
+        confirmButtonText: 'ปิดหน้าต่าง'
+      });
+    }
+
+    function editRecord(id) {
+      const item = allTransactions.find(t => t.id === id);
+      if(!item) return;
+
+      Swal.fire({
+        title: 'แก้ไขข้อมูลรายการ',
+        html: `
+          <div class="text-left space-y-3 mt-4">
+            <div>
+              <label class="block text-sm text-gray-700">ประเภท</label>
+              <select id="editType" class="w-full border p-2 rounded">
+                <option value="Expense" ${item.type === 'Expense' ? 'selected' : ''}>รายจ่าย (Expense)</option>
+                <option value="Income" ${item.type === 'Income' ? 'selected' : ''}>รายรับ (Income)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm text-gray-700">หมวดหมู่</label>
+              <input type="text" id="editCategory" class="w-full border p-2 rounded" value="${item.category}">
+            </div>
+            <div>
+              <label class="block text-sm text-gray-700">จำนวนเงิน</label>
+              <input type="number" id="editAmount" step="0.01" class="w-full border p-2 rounded" value="${item.amount}">
+            </div>
+            <div>
+              <label class="block text-sm text-gray-700">หมายเหตุ</label>
+              <textarea id="editNote" class="w-full border p-2 rounded">${item.note}</textarea>
+            </div>
+            <p class="text-xs text-red-500">* ไม่สามารถแก้ไขไฟล์แนบสลิปได้</p>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'บันทึกการแก้ไข',
+        cancelButtonText: 'ยกเลิก',
+        preConfirm: () => {
+          const amount = document.getElementById('editAmount').value;
+          if(!amount || amount <= 0) {
+            Swal.showValidationMessage('กรุณาใส่จำนวนเงินให้ถูกต้อง');
+            return false;
+          }
+          return {
+            id: id,
+            type: document.getElementById('editType').value,
+            category: document.getElementById('editCategory').value,
+            amount: amount,
+            note: document.getElementById('editNote').value
+          }
+        }
+      }).then((result) => {
+        if (result.isConfirmed) {
+          Swal.fire({title: 'กำลังบันทึก...', allowOutsideClick: false, didOpen: () => {Swal.showLoading()}});
+          google.script.run
+            .withSuccessHandler(res => {
+              if(res.success) {
+                Swal.fire('สำเร็จ', res.message, 'success');
+                loadReportData(); // โหลดข้อมูลใหม่เพื่อรีเฟรชตาราง
+              } else {
+                Swal.fire('ผิดพลาด', res.message, 'error');
+              }
+            })
+            .updateTransaction(result.value);
+        }
+      });
+    }
+
+    function deleteRecord(id) {
+      Swal.fire({
+        title: 'ยืนยันการลบข้อมูล?',
+        text: "หากลบแล้วจะไม่สามารถกู้คืนได้!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'ใช่, ลบเลย!',
+        cancelButtonText: 'ยกเลิก'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          Swal.fire({title: 'กำลังลบข้อมูล...', allowOutsideClick: false, didOpen: () => {Swal.showLoading()}});
+          
+          google.script.run
+            .withSuccessHandler(res => {
+              if(res.success) {
+                Swal.fire('ลบสำเร็จ!', res.message, 'success');
+                loadReportData(); // โหลดข้อมูลใหม่เพื่อรีเฟรชตาราง
+              } else {
+                Swal.fire('ผิดพลาด', res.message, 'error');
+              }
+            })
+            .deleteTransaction(id);
+        }
+      });
+    }
+
+    // ==========================================
+    // 4. ส่วน Dashboard & Form (โค้ดเดิม)
+    // ==========================================
+    function loadDashboardData() {
+      // โค้ดโหลดแดชบอร์ดตามเดิม
+      const sumIncomeEl = document.getElementById('sumIncome');
+      const sumExpenseEl = document.getElementById('sumExpense');
+      const netProfitEl = document.getElementById('netProfit');
+      const partnerTableBodyEl = document.getElementById('partnerTableBody');
+
+      if(sumIncomeEl) sumIncomeEl.innerText = 'กำลังโหลด...';
+      if(sumExpenseEl) sumExpenseEl.innerText = 'กำลังโหลด...';
+      if(netProfitEl) netProfitEl.innerText = 'กำลังโหลด...';
+      if(partnerTableBodyEl) partnerTableBodyEl.innerHTML = '<tr><td colspan="3" class="px-6 py-4 text-center text-sm text-gray-500">กำลังโหลดข้อมูล...</td></tr>';
+
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if(sumIncomeEl) sumIncomeEl.innerText = data.income.toLocaleString(undefined, {minimumFractionDigits: 2}) + ' ฿';
+          if(sumExpenseEl) sumExpenseEl.innerText = data.expense.toLocaleString(undefined, {minimumFractionDigits: 2}) + ' ฿';
+          if(netProfitEl) netProfitEl.innerText = data.netProfit.toLocaleString(undefined, {minimumFractionDigits: 2}) + ' ฿';
+
+          const chartCanvas = document.getElementById('expenseChart');
+          if (chartCanvas) {
+            const ctx = chartCanvas.getContext('2d');
+            if (currentChart) currentChart.destroy();
+            currentChart = new Chart(ctx, {
+              type: 'doughnut',
+              data: {
+                labels: data.categories,
+                datasets: [{
+                  data: data.categoryValues,
+                  backgroundColor: ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899'],
+                  borderWidth: 1
+                }]
+              },
+              options: { responsive: true, maintainAspectRatio: false }
+            });
+          }
+
+          if (partnerTableBodyEl) {
+            let tbodyHtml = '';
+            if(data.partners && data.partners.length > 0) {
+              data.partners.forEach(p => {
+                tbodyHtml += `<tr>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${p.name}</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${p.percent}%</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-green-600 font-bold">${p.share.toLocaleString(undefined, {minimumFractionDigits: 2})} ฿</td>
+                </tr>`;
+              });
+            } else {
+              tbodyHtml = '<tr><td colspan="3" class="px-6 py-4 text-center text-sm text-gray-500">ไม่พบข้อมูล</td></tr>';
+            }
+            partnerTableBodyEl.innerHTML = tbodyHtml;
+          }
+        })
+        .withFailureHandler(function(error) {
+           if(partnerTableBodyEl) partnerTableBodyEl.innerHTML = '<tr><td colspan="3" class="px-6 py-4 text-center text-sm text-red-500">เกิดข้อผิดพลาดในการโหลดข้อมูล</td></tr>';
+        })
+        .getDashboardStats();
+    }
+
+    // แทนที่ฟังก์ชัน submitForm และ sendDataToBackend อันเดิมด้วยโค้ดด้านล่างนี้
+    function submitForm(event, type) {
+      event.preventDefault();
+      
+      const amount = parseFloat(document.getElementById(`amount${type}`).value);
+      if(isNaN(amount) || amount <= 0) {
+         Swal.fire('ข้อผิดพลาด', 'กรุณาระบุจำนวนเงินให้ถูกต้อง (ต้องมากกว่า 0)', 'warning');
+         return;
+      }
+
+      const btn = document.getElementById(`submitBtn${type}`);
+      const originalBtnText = btn.innerHTML;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> กำลังบันทึก...';
+      btn.disabled = true;
+
+      const fileInput = document.getElementById(`receiptFile${type}`);
+      const file = fileInput.files[0];
+      
+      let noteValue = document.getElementById(`note${type}`).value;
+      
+      // ถ้าระบุร้านค้าในหน้ารายจ่าย ให้นำไปต่อรวมกับหมายเหตุ
+      if (type === 'Expense') {
+        const shop = document.getElementById('shopExpense').value;
+        if (shop) {
+          noteValue = `[ร้าน: ${shop}] ${noteValue}`;
+        }
+      }
+
+      const formData = {
+        type: type,
+        category: document.getElementById(`category${type}`).value,
+        amount: amount,
+        note: noteValue,
+        fileData: null,
+        fileName: null,
+        fileMimeType: null
+      };
+
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          formData.fileData = e.target.result.split(',')[1];
+          formData.fileName = file.name;
+          formData.fileMimeType = file.type;
+          sendDataToBackend(formData, type, originalBtnText);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        sendDataToBackend(formData, type, originalBtnText);
+      }
+    }
+
+    function sendDataToBackend(formData, type, originalBtnText) {
+      google.script.run
+        .withSuccessHandler(function(response) {
+          const btn = document.getElementById(`submitBtn${type}`);
+          btn.innerHTML = originalBtnText;
+          btn.disabled = false;
+
+          if(response.success) {
+            Swal.fire('สำเร็จ!', response.message, 'success');
+            if(type === 'Income') document.getElementById('incomeForm').reset();
+            if(type === 'Expense') document.getElementById('expenseForm').reset();
+          } else {
+            Swal.fire('เกิดข้อผิดพลาด', response.message, 'error');
+          }
+        })
+        .withFailureHandler(function(error) {
+          Swal.fire('ขัดข้อง', error.message, 'error');
+          const btn = document.getElementById(`submitBtn${type}`);
+          btn.innerHTML = originalBtnText;
+          btn.disabled = false;
+        })
+        .processExpenseForm(formData);
+    }
+
+    function sendLineNotify() {
+      Swal.fire({
+        title: 'ยืนยันการส่ง LINE',
+        text: "ต้องการสรุปยอดประจำวันส่งเข้ากลุ่ม LINE ใช่หรือไม่?",
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#10b981',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'ใช่, ส่งเลย',
+        cancelButtonText: 'ยกเลิก'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          Swal.fire({title: 'กำลังส่ง...', allowOutsideClick: false, didOpen: () => {Swal.showLoading()}});
+          google.script.run
+            .withSuccessHandler(res => {
+              if(res.success) Swal.fire('ส่งสำเร็จ!', res.message, 'success');
+              else Swal.fire('ขัดข้อง', res.message, 'error');
+            })
+            .sendLineFlexMessage();
+        }
+      });
+    }
+  </script>
+</body>
+</html>
